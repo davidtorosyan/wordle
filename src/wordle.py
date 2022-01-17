@@ -8,18 +8,48 @@ WORD_LENGTH = 5
 def main():
     words = load_words()
     print('Loaded {} words.'.format(len(words)))
-    guess = get_next_word(words)
-    print('Guess {}'.format(guess.upper()))
+    play(words)
 
-def get_next_word(words):
-    filtered = filter_words(words)
-    ranked = rank_words(filtered)
+def play(words):
+    knowledge = None
+    while True:
+        guess = get_next_word(words, knowledge)
+        print('Guess: {}'.format(guess.upper()))
+        response = input('Was it right? ')
+        if (is_win(response)):
+            print('Hooray!')
+            break
+        elif (is_loss(response)):
+            print('Darn.')
+            break
+        else:
+            info = parse(response)
+            if not info:
+                print('Unable to parse response, try again!')
+            else:
+                knowledge = merge(knowledge, info)
+
+def merge(current_info, new_info):
+    return current_info
+
+def is_win(response):
+    return response == 'won'
+
+def is_loss(response):
+    return response == 'lost'
+
+def parse(response):
+    return 0
+
+def get_next_word(words, knowledge):
+    filtered = filter_words(words, knowledge)
+    ranked = rank_words(filtered, knowledge)
     return choose_word(ranked)
 
-def filter_words(words):
+def filter_words(words, knowledge):
     return set([word for word in words if len(word) == WORD_LENGTH])
 
-def rank_words(words):
+def rank_words(words, knowledge):
     return {word: 1.0 for word in words}
 
 def choose_word(word_rankings):
