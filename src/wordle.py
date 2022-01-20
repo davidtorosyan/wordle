@@ -14,6 +14,7 @@ class State:
     def __init__(self):
         self.required = {}
         self.spots = []
+        self.blocklist = set()
         for idx in range(0, WORD_LENGTH):
             self.spots.append(set(string.ascii_uppercase))
 
@@ -22,6 +23,7 @@ class State:
             self.required[letter] = max(self.required.get(letter, 0), num)
         for idx, spot in enumerate(self.spots):
             spot.intersection_update(other.spots[idx])
+        self.blocklist.update(other.blocklist)
 
     def mark_wrong(self, letter, index):
         self.spots[index].discard(letter)
@@ -40,6 +42,9 @@ class State:
             # don't mess with the spot if it's already solved
             if len(spot) > 1:
                 spot.discard(letter)
+
+    def not_word(self, word):
+        self.blocklist.add(word)
 
     def is_consistent(self):
         for spot in self.spots:
@@ -89,6 +94,9 @@ def play(words):
         elif (is_loss(response)):
             print('Darn.')
             break
+        elif (is_not_word(response)):
+            print('Okay, let\'s try again.')
+            knowledge.not_word(guess)
         else:
             info = parse(guess, response)
             if not info:
@@ -113,6 +121,9 @@ def is_win(response):
 
 def is_loss(response):
     return response == 'lost'
+
+def is_not_word(response):
+    return response == 'what'
 
 def parse(guess, response):
     if response is None or len(response) != WORD_LENGTH:
@@ -147,6 +158,8 @@ def filter_words(words, state):
 
 def satisfied(word, state):
     if len(word) != WORD_LENGTH:
+        return False
+    if word in state.blocklist:
         return False
     for idx, char in enumerate(word):
         if char not in state.spots[idx]:
