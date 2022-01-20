@@ -82,7 +82,6 @@ def main():
 def play(words):
     knowledge = State()
     while True:
-        print('Current knowledge: {}'.format(knowledge))
         guess = get_next_word(words, knowledge)
         if not guess:
             print('No eligible guess found, we lost!')
@@ -172,7 +171,7 @@ def satisfied(word, state):
 
 def rank_words(words, state):
     total = len(words)
-    print('Ranking {} words'.format(total))
+    print('Ranking {} words using knowledge: {}'.format(total, state))
     composite = build_composite(words)
     return {word: rank_word(word, total, composite, state) for word in words}
 
