@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import statistics
 import string
 
 WORD_FILE_PATH = 'words_alpha.txt'
@@ -170,7 +171,31 @@ def satisfied(word, state):
     return True
 
 def rank_words(words, state):
-    return {word: 1.0 for word in words}
+    total = len(words)
+    print('Ranking {} words'.format(total))
+    composite = build_composite(words)
+    return {word: rank_word(word, total, composite, state) for word in words}
+
+def build_composite(words):
+    result = []
+    for idx in range(0, WORD_LENGTH):
+        spot = {}
+        for word in words:
+            letter = word[idx]
+            spot[letter] = spot.get(letter, 0) + 1
+        result.append(spot)
+    return result
+
+def rank_word(word, total, composite, state):
+    return statistics.mean((rank_letter(letter, total, composite[idx], state.spots[idx]) for idx, letter in enumerate(word)))
+
+def rank_letter(letter, total, composite, spot):
+    remaining_if_right = composite[letter]
+    remaining_if_wrong = total - remaining_if_right
+    probability_right = 1.0 / len(spot)
+    probability_wrong = 1.0 - probability_right
+    expected_remaining = probability_right * remaining_if_right + probability_wrong * remaining_if_wrong
+    return expected_remaining / total
 
 def choose_word(word_rankings):
     # sort by score, and then by word to break ties
