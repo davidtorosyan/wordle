@@ -8,6 +8,7 @@ import string
 ALPHA_FILE_PATH = 'word_lists/alpha.txt'
 WORDLE_FILE_PATH = 'word_lists/wordle.txt'
 DEFAULT_WORD_LENGTH = 5
+DEFAULT_ROUNDS = 6
 
 RESPONSE_WRONG = 'b' # black
 RESPONSE_CLOSE = 'y' # yellow
@@ -80,34 +81,36 @@ class State:
 def main():
     args = get_parser().parse_args()
     word_file = ALPHA_FILE_PATH if args.word_length != 5 or args.expanded_word_list else WORDLE_FILE_PATH
+    test_word = args.test_word.upper() if args.test_word else None
     words = load_words(word_file)
     print('Loaded {} words.'.format(len(words)))
-    play(words, args.word_length)
+    play(words, args.word_length, args.rounds, test_word)
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="Solver for wordle at https://www.powerlanguage.co.uk/wordle/")
-    parser.add_argument("-l", "--word-length", type=int, default=DEFAULT_WORD_LENGTH, 
-                        help="The word length ({} by default), non-default implies --expanded-word-list".format(DEFAULT_WORD_LENGTH))
-    parser.add_argument("--expanded-word-list", dest="expanded_word_list", action="store_true",
-                        help="If used, run against a larger dictionary.")
+    parser = argparse.ArgumentParser(description='Solver for wordle at https://www.powerlanguage.co.uk/wordle/')
+    parser.add_argument('-l', '--word-length', type=int, default=DEFAULT_WORD_LENGTH, 
+                        help='The word length ({} by default), non-default implies --expanded-word-list'.format(DEFAULT_WORD_LENGTH))
+    parser.add_argument('-r', '--rounds', type=int, default=DEFAULT_ROUNDS, 
+                        help='The number of rounds ({} by default)'.format(DEFAULT_ROUNDS))
+    parser.add_argument('--expanded-word-list', dest='expanded_word_list', action='store_true',
+                        help='If used, run against a larger dictionary.')
+    parser.add_argument('-t', '--test-word', default=None, 
+                        help='Optional, use to run a test against a word')
     return parser
 
-def play(words, word_length):
+def play(words, word_length, max_rounds, test_word):
+    if test_word:
+        print('Running test for word: {}'.format(test_word))
     knowledge = State(word_length)
+    round = 1
     while True:
         guess = get_next_word(words, knowledge)
         if not guess:
             print('No eligible guess found, we lost!')
             break
-        print('Guess: {}'.format(guess))
-        response = input('Was it right? ')
-        if (is_win(response)):
-            print('Hooray!')
-            break
-        elif (is_loss(response)):
-            print('Darn.')
-            break
-        elif (is_not_word(response)):
+        print('Round {}, guess: {}'.format(round, guess))
+        response = get_test_response(guess, test_word) if test_word else input('Was it right? ')
+        if (is_not_word(response)):
             print('Okay, let\'s try again.')
             knowledge.not_word(guess)
         else:
@@ -120,8 +123,40 @@ def play(words, word_length):
                 updated = merge(knowledge, info)
                 if not updated.is_consistent():
                     print('Response is not consistent with current state, try again!')
+                elif is_win(response, word_length):
+                    print('Hooray!')
+                    break
+                elif (round >= max_rounds):
+                    print('Ran out of tries, we lost!')
+                    break
                 else:
                     knowledge = updated
+                    round += 1
+
+def get_test_response(guess, test_word):
+    guess_list = list(guess)
+    test_list = list(test_word)
+    result = [''] * len(guess)
+    for idx, char in enumerate(guess_list):
+        if char == test_list[idx]:
+            result[idx] = RESPONSE_RIGHT
+            guess_list[idx] = ''
+            test_list[idx] = ''
+    for idx, char in enumerate(guess_list):
+        if not char:
+            continue
+        test_idx = test_list.index(char) if char in test_list else None
+        if test_idx is not None:
+            result[idx] = RESPONSE_CLOSE
+            guess_list[idx] = ''
+            test_list[test_idx] = ''
+    for idx, char in enumerate(guess_list):
+        if not char:
+            continue
+        result[idx] = RESPONSE_WRONG
+    response = ''.join(result)
+    print('Was it right? {}'.format(response))
+    return response
 
 def merge(current_info, new_info):
     state = State(current_info.word_length)
@@ -129,8 +164,8 @@ def merge(current_info, new_info):
     state.fill(new_info)
     return state
 
-def is_win(response):
-    return response == 'won'
+def is_win(response, word_length):
+    return response == RESPONSE_RIGHT * word_length
 
 def is_loss(response):
     return response == 'lost'
