@@ -84,7 +84,10 @@ def main():
     test_word = args.test_word.upper() if args.test_word else None
     words = load_words(word_file)
     print('Loaded {} words.'.format(len(words)))
-    play(words, args.word_length, args.rounds, test_word)
+    if args.test_all:
+        test_all(words, args.word_length, args.rounds)
+    else:
+        play(words, args.word_length, args.rounds, test_word, False)
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Solver for wordle at https://www.powerlanguage.co.uk/wordle/')
@@ -96,44 +99,63 @@ def get_parser():
                         help='If used, run against a larger dictionary.')
     parser.add_argument('-t', '--test-word', default=None, 
                         help='Optional, use to run a test against a word')
+    parser.add_argument("--test-all", dest="test_all", action="store_true",
+                        help="Optional, if used run a test against all words")
     return parser
 
-def play(words, word_length, max_rounds, test_word):
+def test_all(words, word_length, max_rounds):
+    eligible_words = sorted(word for word in words if len(word) == word_length)
+    for word in eligible_words:
+        rounds = play(words, word_length, max_rounds, word, True)
+        print('{}: {}'.format(word, rounds))
+
+def play(words, word_length, max_rounds, test_word, quiet):
+    if quiet and not test_word:
+        raise Exception('Cannot run quiet without a test word!')
     if test_word:
-        print('Running test for word: {}'.format(test_word))
+        if not quiet:
+            print('Running test for word: {}'.format(test_word))
     knowledge = State(word_length)
     round = 1
     while True:
-        guess = get_next_word(words, knowledge)
+        guess = get_next_word(words, knowledge, quiet)
         if not guess:
-            print('No eligible guess found, we lost!')
-            break
-        print('Round {}, guess: {}'.format(round, guess))
-        response = get_test_response(guess, test_word) if test_word else input('Was it right? ')
+            if not quiet:
+                print('No eligible guess found, we lost!')
+            return None
+        if not quiet:
+            print('Round {}, guess: {}'.format(round, guess))
+        response = get_test_response(guess, test_word, quiet) if test_word else input('Was it right? ')
         if (is_not_word(response)):
-            print('Okay, let\'s try again.')
+            if not quiet:
+                print('Okay, let\'s try again.')
             knowledge.not_word(guess)
         else:
             info = parse(guess, response, word_length)
             if not info:
-                print('Unable to parse response, try again!')
+                if not quiet:
+                    print('Unable to parse response, try again!')
             elif not info.is_consistent():
-                print('Response is not self consistent, try again!')
+                if not quiet:
+                    print('Response is not self consistent, try again!')
             else:
                 updated = merge(knowledge, info)
                 if not updated.is_consistent():
-                    print('Response is not consistent with current state, try again!')
+                    if not quiet:
+                        print('Response is not consistent with current state, try again!')
                 elif is_win(response, word_length):
-                    print('Hooray!')
-                    break
+                    if not quiet:
+                        print('Hooray!')
+                    return round
                 elif (round >= max_rounds):
-                    print('Ran out of tries, we lost!')
-                    break
+                    if not quiet:
+                        print('Ran out of tries, we lost!')
+                    return None
                 else:
                     knowledge = updated
                     round += 1
 
-def get_test_response(guess, test_word):
+def get_test_response(guess, test_word, quiet):
     guess_list = list(guess)
     test_list = list(test_word)
     result = [''] * len(guess)
@@ -155,7 +177,8 @@ def get_test_response(guess, test_word):
             continue
         result[idx] = RESPONSE_WRONG
     response = ''.join(result)
-    print('Was it right? {}'.format(response))
+    if not quiet:
+        print('Was it right? {}'.format(response))
     return response
 
 def merge(current_info, new_info):
@@ -196,9 +219,9 @@ def parse(guess, response, word_length):
         result.mark_wrong_everywhere(guess_char)
     return result
 
-def get_next_word(words, state):
+def get_next_word(words, state, quiet):
     filtered = filter_words(words, state)
-    ranked = rank_words(filtered, state)
+    ranked = rank_words(filtered, state, quiet)
     return choose_word(ranked)
 
 def filter_words(words, state):
@@ -217,9 +240,10 @@ def satisfied(word, state):
             return False
     return True
 
-def rank_words(words, state):
+def rank_words(words, state, quiet):
     total = len(words)
-    print('Ranking {} words using knowledge: {}'.format(total, state))
+    if not quiet:
+        print('Ranking {} words using knowledge: {}'.format(total, state))
     composite = build_composite(words, state)
     return {word: rank_word(word, total, composite, state) for word in words}
 
