@@ -1,22 +1,24 @@
 #!/usr/bin/env python
 
+import argparse
 import os
 import statistics
 import string
 
 WORD_FILE_PATH = 'words_alpha.txt'
-WORD_LENGTH = 5
+DEFAULT_WORD_LENGTH = 5
 
 RESPONSE_WRONG = 'b' # black
 RESPONSE_CLOSE = 'y' # yellow
 RESPONSE_RIGHT = 'g' # green
 
 class State:
-    def __init__(self):
+    def __init__(self, word_length):
         self.required = {}
         self.spots = []
         self.blocklist = set()
-        for idx in range(0, WORD_LENGTH):
+        self.word_length = word_length
+        for idx in range(0, self.word_length):
             self.spots.append(set(string.ascii_uppercase))
 
     def fill(self, other):
@@ -51,7 +53,7 @@ class State:
         for spot in self.spots:
             if not spot:
                 return False
-        if sum(self.required.values()) > WORD_LENGTH:
+        if sum(self.required.values()) > self.word_length:
             return False
         for letter, count in self.required.items():
             if count > self.count_spots_with_letter(letter):
@@ -75,12 +77,19 @@ class State:
         return self.__str__()
 
 def main():
+    args = get_parser().parse_args()
     words = load_words()
     print('Loaded {} words.'.format(len(words)))
-    play(words)
+    play(words, args.word_length)
 
-def play(words):
-    knowledge = State()
+def get_parser():
+    parser = argparse.ArgumentParser(description="Solver for wordle at https://www.powerlanguage.co.uk/wordle/")
+    parser.add_argument("-l", "--word-length", type=int, default=DEFAULT_WORD_LENGTH, 
+                        help="The word length ({} by default)".format(DEFAULT_WORD_LENGTH))
+    return parser
+
+def play(words, word_length):
+    knowledge = State(word_length)
     while True:
         guess = get_next_word(words, knowledge)
         if not guess:
@@ -98,7 +107,7 @@ def play(words):
             print('Okay, let\'s try again.')
             knowledge.not_word(guess)
         else:
-            info = parse(guess, response)
+            info = parse(guess, response, word_length)
             if not info:
                 print('Unable to parse response, try again!')
             elif not info.is_consistent():
@@ -111,7 +120,7 @@ def play(words):
                     knowledge = updated
 
 def merge(current_info, new_info):
-    state = State()
+    state = State(current_info.word_length)
     state.fill(current_info)
     state.fill(new_info)
     return state
@@ -125,10 +134,10 @@ def is_loss(response):
 def is_not_word(response):
     return response == 'what'
 
-def parse(guess, response):
-    if response is None or len(response) != WORD_LENGTH:
+def parse(guess, response, word_length):
+    if response is None or len(response) != word_length:
         return None
-    result = State()
+    result = State(word_length)
     wrong = set()
     close = set()
     for idx, char in enumerate(response):
@@ -157,7 +166,7 @@ def filter_words(words, state):
     return set([word for word in words if satisfied(word, state)])
 
 def satisfied(word, state):
-    if len(word) != WORD_LENGTH:
+    if len(word) != state.word_length:
         return False
     if word in state.blocklist:
         return False
@@ -172,12 +181,12 @@ def satisfied(word, state):
 def rank_words(words, state):
     total = len(words)
     print('Ranking {} words using knowledge: {}'.format(total, state))
-    composite = build_composite(words)
+    composite = build_composite(words, state)
     return {word: rank_word(word, total, composite, state) for word in words}
 
-def build_composite(words):
+def build_composite(words, state):
     result = []
-    for idx in range(0, WORD_LENGTH):
+    for idx in range(0, state.word_length):
         spot = {}
         for word in words:
             letter = word[idx]
