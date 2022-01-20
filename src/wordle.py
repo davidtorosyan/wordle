@@ -5,16 +5,64 @@ import os
 WORD_FILE_PATH = 'words_alpha.txt'
 WORD_LENGTH = 5
 
+RESPONSE_WRONG = 'b' # black
+RESPONSE_CLOSE = 'y' # yellow
+RESPONSE_RIGHT = 'g' # green
+
+class State:
+    def __init__(self):
+        self.wrong = set()
+        self.close = {}
+        self.right = {}
+
+    def fill(self, other):
+        self.wrong.update(other.wrong)
+        for (letter, indices) in other.close.items():
+            for index in indices:
+                self.mark_close(letter, index)
+        self.right.update(other.right)
+
+    def mark_wrong(self, letter):
+        self.wrong.add(letter)
+
+    def mark_close(self, letter, index):
+        indices = self.close.get(letter, set())
+        indices.add(index)
+        self.close[letter] = indices
+
+    def mark_right(self, letter, index):
+        self.right[letter] = index
+
+    def is_consistent(self):
+        if self.wrong.intersection(self.close.keys()):
+            return False
+        if self.wrong.intersection(self.right.keys()):
+            return False
+        close_indices = set((letter, index) for (letter, indices) in self.close.items() for index in indices)
+        if close_indices.intersection(self.right.items()):
+            return False
+        return True
+
+    def __str__(self):
+        return "Right: {}, Close: {}, Wrong: {}".format(
+            self.right.__str__(),
+            self.close.__str__(),
+            self.wrong.__str__())
+
+    def __repr__(self):
+        return self.__str__()
+
 def main():
     words = load_words()
     print('Loaded {} words.'.format(len(words)))
     play(words)
 
 def play(words):
-    knowledge = None
+    knowledge = State()
     while True:
-        guess = get_next_word(words, knowledge)
-        print('Guess: {}'.format(guess.upper()))
+        print('Current knowledge: {}'.format(knowledge))
+        guess = get_next_word(words, knowledge).upper()
+        print('Guess: {}'.format(guess))
         response = input('Was it right? ')
         if (is_win(response)):
             print('Hooray!')
@@ -23,14 +71,23 @@ def play(words):
             print('Darn.')
             break
         else:
-            info = parse(response)
+            info = parse(guess, response)
             if not info:
                 print('Unable to parse response, try again!')
+            elif not info.is_consistent():
+                print('Response is not self consistent, try again!')
             else:
-                knowledge = merge(knowledge, info)
+                updated = merge(knowledge, info)
+                if not updated.is_consistent():
+                    print('Response is not consistent with current state, try again!')
+                else:
+                    knowledge = updated
 
 def merge(current_info, new_info):
-    return current_info
+    state = State()
+    state.fill(current_info)
+    state.fill(new_info)
+    return state
 
 def is_win(response):
     return response == 'won'
@@ -38,8 +95,21 @@ def is_win(response):
 def is_loss(response):
     return response == 'lost'
 
-def parse(response):
-    return 0
+def parse(guess, response):
+    if response is None or len(response) != WORD_LENGTH:
+        return None
+    result = State()
+    for idx, char in enumerate(response):
+        guess_char = guess[idx]
+        if char == RESPONSE_WRONG:
+            result.mark_wrong(guess_char)
+        elif char == RESPONSE_CLOSE:
+            result.mark_close(guess_char, idx)
+        elif char == RESPONSE_RIGHT:
+            result.mark_right(guess_char, idx)
+        else:
+            return None
+    return result
 
 def get_next_word(words, knowledge):
     filtered = filter_words(words, knowledge)
