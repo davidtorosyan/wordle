@@ -5,7 +5,8 @@ import os
 import statistics
 import string
 
-WORD_FILE_PATH = 'words_alpha.txt'
+ALPHA_FILE_PATH = 'word_lists/alpha.txt'
+WORDLE_FILE_PATH = 'word_lists/wordle.txt'
 DEFAULT_WORD_LENGTH = 5
 
 RESPONSE_WRONG = 'b' # black
@@ -78,14 +79,17 @@ class State:
 
 def main():
     args = get_parser().parse_args()
-    words = load_words()
+    word_file = ALPHA_FILE_PATH if args.word_length != 5 or args.expanded_word_list else WORDLE_FILE_PATH
+    words = load_words(word_file)
     print('Loaded {} words.'.format(len(words)))
     play(words, args.word_length)
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Solver for wordle at https://www.powerlanguage.co.uk/wordle/")
     parser.add_argument("-l", "--word-length", type=int, default=DEFAULT_WORD_LENGTH, 
-                        help="The word length ({} by default)".format(DEFAULT_WORD_LENGTH))
+                        help="The word length ({} by default), non-default implies --expanded-word-list".format(DEFAULT_WORD_LENGTH))
+    parser.add_argument("--expanded-word-list", dest="expanded_word_list", action="store_true",
+                        help="If used, run against a larger dictionary.")
     return parser
 
 def play(words, word_length):
@@ -212,13 +216,13 @@ def choose_word(word_rankings):
     ranked = dict(sorted(word_rankings.items(), key=lambda item: (item[1], item[0])))
     return next(iter(ranked))
 
-def load_words():
-    with open(get_word_file_path()) as word_file:
+def load_words(path):
+    with open(get_word_file_path(path)) as word_file:
         return set(word_file.read().upper().split())
 
-def get_word_file_path():
+def get_word_file_path(path):
     script_dir = os.path.dirname(__file__) 
-    return os.path.join(script_dir, WORD_FILE_PATH)
+    return os.path.join(script_dir, path)
 
 if __name__ == '__main__':
     main()
