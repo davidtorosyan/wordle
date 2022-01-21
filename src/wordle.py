@@ -108,7 +108,7 @@ def get_parser():
     testing.add_argument('-a', '--test-all', dest='test_all', action='store_true',
                         help='Optional, if used run a test against all words')
     testing.add_argument('-s', '--test-set', nargs='*', default=None,
-                        help='Optional, if used run a test against all words')
+                        help='Optional, if used run against a set of words (the words from January 2022 by default)')
     return parser
 
 def test_many(words, word_length, max_rounds, test_set):
@@ -126,9 +126,10 @@ def test_many(words, word_length, max_rounds, test_set):
     success = sum(scores)
     played = success + failed
     win_percent = success / played
+    mean_score = sum(((idx+1) * score for idx, score in enumerate(scores))) / success
     max_score = max(scores)
     scaled = max_score > STATS_BAR_MAX_LENGTH
-    print('\nSTATISTICS\nPlayed: {}, Win %: {:.0%}, Won: {}, Failed: {}'.format(played, win_percent, success, failed))
+    print('\nSTATISTICS\nPlayed: {}, Win %: {:.0%}, Won: {}, Failed: {}, Mean: {:.1f}'.format(played, win_percent, success, failed, mean_score))
     for idx, score in enumerate(scores):
         bar_length = int(score / max_score * STATS_BAR_MAX_LENGTH) if scaled else score
         bar = STATS_BAR_CHAR * bar_length
