@@ -9,6 +9,10 @@ ALPHA_FILE_PATH = 'word_lists/alpha.txt'
 WORDLE_FILE_PATH = 'word_lists/wordle.txt'
 DEFAULT_WORD_LENGTH = 5
 DEFAULT_ROUNDS = 6
+DEFAULT_TEST_SET = ['REBUS', 'BOOST', 'TRUSS', 'SIEGE', 'TIGER', 'BANAL', 'SLUMP', 'CRANK', 'GORGE', 'QUERY', 'DRINK', 'FAVOR', 'ABBEY', 'TANGY', 'PANIC', 'SOLAR', 'SHIRE', 'PROXY', 'POINT']
+
+STATS_BAR_MAX_LENGTH = 10
+STATS_BAR_CHAR = 'X'
 
 RESPONSE_WRONG = 'b' # black
 RESPONSE_CLOSE = 'y' # yellow
@@ -82,10 +86,11 @@ def main():
     args = get_parser().parse_args()
     word_file = ALPHA_FILE_PATH if args.word_length != 5 or args.expanded_word_list else WORDLE_FILE_PATH
     test_word = args.test_word.upper() if args.test_word else None
+    test_set = DEFAULT_TEST_SET if args.test_set == [] else args.test_set
     words = load_words(word_file)
     print('Loaded {} words.'.format(len(words)))
-    if args.test_all:
-        test_all(words, args.word_length, args.rounds)
+    if args.test_all or test_set:
+        test_many(words, args.word_length, args.rounds, test_set)
     else:
         play(words, args.word_length, args.rounds, test_word, False)
 
@@ -97,17 +102,37 @@ def get_parser():
                         help='The number of rounds ({} by default)'.format(DEFAULT_ROUNDS))
     parser.add_argument('--expanded-word-list', dest='expanded_word_list', action='store_true',
                         help='If used, run against a larger dictionary.')
-    parser.add_argument('-t', '--test-word', default=None, 
+    testing = parser.add_mutually_exclusive_group()
+    testing.add_argument('-t', '--test-word', default=None, 
                         help='Optional, use to run a test against a word')
-    parser.add_argument("--test-all", dest="test_all", action="store_true",
-                        help="Optional, if used run a test against all words")
+    testing.add_argument('-a', '--test-all', dest='test_all', action='store_true',
+                        help='Optional, if used run a test against all words')
+    testing.add_argument('-s', '--test-set', nargs='*', default=None,
+                        help='Optional, if used run a test against all words')
     return parser
 
-def test_all(words, word_length, max_rounds):
-    eligible_words = sorted(word for word in words if len(word) == word_length)
+def test_many(words, word_length, max_rounds, test_set):
+    eligible_words = test_set if test_set else sorted(word for word in words if len(word) == word_length)
+    scores = [0] * max_rounds
+    failed = 0
     for word in eligible_words:
-        rounds = play(words, word_length, max_rounds, word, True)
-        print('{}: {}'.format(word, rounds))
+        test_word = word.upper()
+        score = play(words, word_length, max_rounds, test_word, True)
+        if score is not None:
+            scores[score-1] += 1
+        else:
+            failed += 1
+        print('{}: {}'.format(test_word, score))
+    success = sum(scores)
+    played = success + failed
+    win_percent = success / played
+    max_score = max(scores)
+    scaled = max_score > STATS_BAR_MAX_LENGTH
+    print('\nSTATISTICS\nPlayed: {}, Win %: {:.0%}, Won: {}, Failed: {}'.format(played, win_percent, success, failed))
+    for idx, score in enumerate(scores):
+        bar_length = int(score / max_score * STATS_BAR_MAX_LENGTH) if scaled else score
+        bar = STATS_BAR_CHAR * bar_length
+        print('{}: {} {}'.format(idx+1, score, bar))
 
 def play(words, word_length, max_rounds, test_word, quiet):
     if quiet and not test_word:
