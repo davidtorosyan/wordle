@@ -3,8 +3,9 @@
 import argparse
 import itertools
 import os
-import statistics
 import string
+
+from collections import defaultdict
 
 ALPHA_FILE_PATH = 'word_lists/alpha.txt'
 WORDLE_FILE_PATH = 'word_lists/wordle.txt'
@@ -12,6 +13,7 @@ DEFAULT_WORD_LENGTH = 5
 DEFAULT_ROUNDS = 6
 DEFAULT_TEST_SET = ['REBUS', 'BOOST', 'TRUSS', 'SIEGE', 'TIGER', 'BANAL', 'SLUMP', 'CRANK', 'GORGE', 'QUERY', 'DRINK', 'FAVOR', 'ABBEY', 'TANGY', 'PANIC', 'SOLAR', 'SHIRE', 'PROXY', 'POINT']
 TOP_CHOICES_COUNT = 5
+RANK_PRECISION = 4
 
 STATS_BAR_MAX_LENGTH = 10
 STATS_BAR_CHAR = 'X'
@@ -80,6 +82,21 @@ class State:
         return 'Required: {}, Options: {}'.format(
             self.required.__str__(),
             options.__str__())
+
+    def __repr__(self):
+        return self.__str__()
+
+class WordStatistics:
+    def __init__(self, total, by_letter, by_index):
+        self.total = total
+        self.by_letter = by_letter
+        self.by_index = by_index
+
+    def __str__(self):
+        return 'Total: {}, by_letter: {}, by_index: {}'.format(
+            self.total.__str__(),
+            self.by_letter.__str__(),
+            self.by_index.__str__())
 
     def __repr__(self):
         return self.__str__()
@@ -273,28 +290,38 @@ def rank_words(words, state, quiet):
     if not quiet:
         print('Ranking {} words using knowledge: {}'.format(total, state))
     composite = build_composite(words, state)
-    return {word: round(rank_word(word, total, composite, state), 2) for word in words}
+    return {word: round(rank_word(word, composite), RANK_PRECISION) for word in words}
 
 def build_composite(words, state):
-    result = []
+    total = len(words)
+    by_letter = defaultdict(int)
+    for word in words:
+        for letter in set(word):
+            by_letter[letter] += 1
+    by_index = []
     for idx in range(0, state.word_length):
         spot = {}
         for word in words:
             letter = word[idx]
             spot[letter] = spot.get(letter, 0) + 1
-        result.append(spot)
-    return result
+        by_index.append(spot)
+    return WordStatistics(total, by_letter, by_index)
 
-def rank_word(word, total, composite, state):
-    return statistics.mean((rank_letter(letter, total, composite[idx], state.spots[idx]) for idx, letter in enumerate(word)))
+def rank_word(word, composite):
+    return sum((rank_letter(letter, idx, composite) for idx, letter in enumerate(word))) / len(word)
 
-def rank_letter(letter, total, composite, spot):
-    remaining_if_right = composite[letter]
-    remaining_if_wrong = total - remaining_if_right
-    probability_right = 1.0 / len(spot)
-    probability_wrong = 1.0 - probability_right
-    expected_remaining = probability_right * remaining_if_right + probability_wrong * remaining_if_wrong
-    return expected_remaining / total
+def rank_letter(letter, idx, composite):
+    remaining_if_right = composite.by_index[idx][letter]
+    remaining_if_close = composite.by_letter[letter] - composite.by_index[idx][letter]
+    remaining_if_wrong = composite.total - composite.by_letter[letter]
+
+    ideal = composite.total / 3
+    distance_right = abs(ideal - remaining_if_right)
+    distance_close = abs(ideal - remaining_if_close)
+    distance_wrong = abs(ideal - remaining_if_wrong)
+
+    distance = (distance_right + distance_close + distance_wrong) / 3
+    return distance / composite.total
 
 def choose_word(word_rankings, quiet):
     # sort by score, and then by word to break ties
