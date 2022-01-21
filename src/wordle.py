@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import itertools
 import os
 import statistics
 import string
@@ -10,6 +11,7 @@ WORDLE_FILE_PATH = 'word_lists/wordle.txt'
 DEFAULT_WORD_LENGTH = 5
 DEFAULT_ROUNDS = 6
 DEFAULT_TEST_SET = ['REBUS', 'BOOST', 'TRUSS', 'SIEGE', 'TIGER', 'BANAL', 'SLUMP', 'CRANK', 'GORGE', 'QUERY', 'DRINK', 'FAVOR', 'ABBEY', 'TANGY', 'PANIC', 'SOLAR', 'SHIRE', 'PROXY', 'POINT']
+TOP_CHOICES_COUNT = 5
 
 STATS_BAR_MAX_LENGTH = 10
 STATS_BAR_CHAR = 'X'
@@ -248,7 +250,7 @@ def parse(guess, response, word_length):
 def get_next_word(words, state, quiet):
     filtered = filter_words(words, state)
     ranked = rank_words(filtered, state, quiet)
-    return choose_word(ranked)
+    return choose_word(ranked, quiet)
 
 def filter_words(words, state):
     return set([word for word in words if satisfied(word, state)])
@@ -271,7 +273,7 @@ def rank_words(words, state, quiet):
     if not quiet:
         print('Ranking {} words using knowledge: {}'.format(total, state))
     composite = build_composite(words, state)
-    return {word: rank_word(word, total, composite, state) for word in words}
+    return {word: round(rank_word(word, total, composite, state), 2) for word in words}
 
 def build_composite(words, state):
     result = []
@@ -294,12 +296,15 @@ def rank_letter(letter, total, composite, spot):
     expected_remaining = probability_right * remaining_if_right + probability_wrong * remaining_if_wrong
     return expected_remaining / total
 
-def choose_word(word_rankings):
+def choose_word(word_rankings, quiet):
     # sort by score, and then by word to break ties
     if not word_rankings:
         return None
     ranked = dict(sorted(word_rankings.items(), key=lambda item: (item[1], item[0])))
-    return next(iter(ranked))
+    top = dict(itertools.islice(ranked.items(), TOP_CHOICES_COUNT))
+    if not quiet:
+        print('Ranked: {}'.format(top))
+    return next(iter(top))
 
 def load_words(path):
     with open(get_word_file_path(path)) as word_file:
