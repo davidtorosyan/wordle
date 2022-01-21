@@ -22,6 +22,10 @@ RESPONSE_WRONG = 'b' # black
 RESPONSE_CLOSE = 'y' # yellow
 RESPONSE_RIGHT = 'g' # green
 
+RESPONSE_WRONG_EMOJI = '⬛' # black
+RESPONSE_CLOSE_EMOJI = '🟨' # yellow
+RESPONSE_RIGHT_EMOJI = '🟩' # green
+
 class State:
     def __init__(self, word_length):
         self.required = {}
@@ -206,7 +210,7 @@ def get_test_response(guess, test_word, quiet):
     result = [''] * len(guess)
     for idx, char in enumerate(guess_list):
         if char == test_list[idx]:
-            result[idx] = RESPONSE_RIGHT
+            result[idx] = RESPONSE_RIGHT_EMOJI
             guess_list[idx] = ''
             test_list[idx] = ''
     for idx, char in enumerate(guess_list):
@@ -214,13 +218,13 @@ def get_test_response(guess, test_word, quiet):
             continue
         test_idx = test_list.index(char) if char in test_list else None
         if test_idx is not None:
-            result[idx] = RESPONSE_CLOSE
+            result[idx] = RESPONSE_CLOSE_EMOJI
             guess_list[idx] = ''
             test_list[test_idx] = ''
     for idx, char in enumerate(guess_list):
         if not char:
             continue
-        result[idx] = RESPONSE_WRONG
+        result[idx] = RESPONSE_WRONG_EMOJI
     response = ''.join(result)
     if not quiet:
         print('Was it right? {}'.format(response))
@@ -233,7 +237,7 @@ def merge(current_info, new_info):
     return state
 
 def is_win(response, word_length):
-    return response == RESPONSE_RIGHT * word_length
+    return response == RESPONSE_RIGHT * word_length or response == RESPONSE_RIGHT_EMOJI * word_length
 
 def is_loss(response):
     return response == 'lost'
@@ -249,13 +253,13 @@ def parse(guess, response, word_length):
     close = set()
     for idx, char in enumerate(response):
         guess_char = guess[idx]
-        if char == RESPONSE_WRONG:
+        if char == RESPONSE_WRONG or char == RESPONSE_WRONG_EMOJI:
             result.mark_wrong(guess_char, idx)
             wrong.add(guess_char)
-        elif char == RESPONSE_CLOSE:
+        elif char == RESPONSE_CLOSE or char == RESPONSE_CLOSE_EMOJI:
             result.mark_close(guess_char, idx)
             close.add(guess_char)
-        elif char == RESPONSE_RIGHT:
+        elif char == RESPONSE_RIGHT or char == RESPONSE_RIGHT_EMOJI:
             result.mark_right(guess_char, idx)
         else:
             return None
