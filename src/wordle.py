@@ -118,7 +118,16 @@ def main():
         play(words, args.word_length, args.rounds, test_word, False, args.debug)
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='Solver for wordle at https://www.powerlanguage.co.uk/wordle/')
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, description="""Solver for wordle at https://www.powerlanguage.co.uk/wordle/
+
+When prompted for the result of a guess, you can respond with letters instead of colors, like:
+    {} = {}
+    {} = {}
+    {} = {}
+    """.format(
+        RESPONSE_RIGHT_EMOJI, RESPONSE_RIGHT,
+        RESPONSE_CLOSE_EMOJI, RESPONSE_CLOSE,
+        RESPONSE_WRONG_EMOJI, RESPONSE_WRONG))
     parser.add_argument('-l', '--word-length', type=int, default=DEFAULT_WORD_LENGTH, 
                         help='The word length ({} by default), non-default implies --expanded-word-list'.format(DEFAULT_WORD_LENGTH))
     parser.add_argument('-r', '--rounds', type=int, default=DEFAULT_ROUNDS, 
