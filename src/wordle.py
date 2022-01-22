@@ -166,6 +166,7 @@ def play(words, word_length, max_rounds, test_word, quiet):
             print('Running test for word: {}'.format(test_word))
     knowledge = State(word_length)
     round = 1
+    responses = []
     while True:
         guess = get_next_word(words, knowledge, quiet)
         if not guess:
@@ -193,14 +194,25 @@ def play(words, word_length, max_rounds, test_word, quiet):
                     if not quiet:
                         print('Response is not consistent with current state, try again!')
                 elif is_win(response, word_length):
+                    responses.append(response)
                     if not quiet:
                         print('Hooray!')
+                        if test_word:
+                            print('\nWordle bot {}/{}\n'.format(round, max_rounds))
+                            for response in responses:
+                                print(response)
                     return round
                 elif (round >= max_rounds):
+                    responses.append(response)
                     if not quiet:
                         print('Ran out of tries, we lost!')
+                        if test_word:
+                            print('\nWordle bot X/{}\n'.format(max_rounds))
+                            for response in responses:
+                                print(response)
                     return None
                 else:
+                    responses.append(response)
                     knowledge = updated
                     round += 1
 
