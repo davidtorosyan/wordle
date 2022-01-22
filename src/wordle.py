@@ -115,7 +115,7 @@ def main():
     if args.test_all or test_set:
         test_many(words, args.word_length, args.rounds, test_set)
     else:
-        play(words, args.word_length, args.rounds, test_word, False)
+        play(words, args.word_length, args.rounds, test_word, False, args.debug)
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Solver for wordle at https://www.powerlanguage.co.uk/wordle/')
@@ -125,6 +125,8 @@ def get_parser():
                         help='The number of rounds ({} by default)'.format(DEFAULT_ROUNDS))
     parser.add_argument('--expanded-word-list', dest='expanded_word_list', action='store_true',
                         help='If used, run against a larger dictionary.')
+    parser.add_argument('-d', '--debug', dest='debug', action='store_true',
+                        help='Optional, if used print debug info')
     testing = parser.add_mutually_exclusive_group()
     testing.add_argument('-t', '--test-word', default=None, 
                         help='Optional, use to run a test against a word')
@@ -140,7 +142,7 @@ def test_many(words, word_length, max_rounds, test_set):
     failed = 0
     for word in eligible_words:
         test_word = word.upper()
-        score = play(words, word_length, max_rounds, test_word, True)
+        score = play(words, word_length, max_rounds, test_word, True, False)
         if score is not None:
             scores[score-1] += 1
         else:
@@ -158,7 +160,7 @@ def test_many(words, word_length, max_rounds, test_set):
         bar = STATS_BAR_CHAR * bar_length
         print('{}: {} {}'.format(idx+1, score, bar))
 
-def play(words, word_length, max_rounds, test_word, quiet):
+def play(words, word_length, max_rounds, test_word, quiet, debug):
     if quiet and not test_word:
         raise Exception('Cannot run quiet without a test word!')
     if test_word:
@@ -168,7 +170,7 @@ def play(words, word_length, max_rounds, test_word, quiet):
     round = 1
     responses = []
     while True:
-        guess = get_next_word(words, knowledge, quiet)
+        guess = get_next_word(words, knowledge, debug)
         if not guess:
             if not quiet:
                 print('No eligible guess found, we lost!')
@@ -280,10 +282,10 @@ def parse(guess, response, word_length):
         result.mark_wrong_everywhere(guess_char)
     return result
 
-def get_next_word(words, state, quiet):
+def get_next_word(words, state, debug):
     filtered = filter_words(words, state)
-    ranked = rank_words(filtered, state, quiet)
-    return choose_word(ranked, quiet)
+    ranked = rank_words(filtered, state, debug)
+    return choose_word(ranked, debug)
 
 def filter_words(words, state):
     return set([word for word in words if satisfied(word, state)])
@@ -301,9 +303,9 @@ def satisfied(word, state):
             return False
     return True
 
-def rank_words(words, state, quiet):
+def rank_words(words, state, debug):
     total = len(words)
-    if not quiet:
+    if debug:
         print('Ranking {} words using knowledge: {}'.format(total, state))
     composite = build_composite(words, state)
     return {word: round(rank_word(word, composite), RANK_PRECISION) for word in words}
@@ -339,13 +341,13 @@ def rank_letter(letter, idx, composite):
     distance = (distance_right + distance_close + distance_wrong) / 3
     return distance / composite.total
 
-def choose_word(word_rankings, quiet):
+def choose_word(word_rankings, debug):
     # sort by score, and then by word to break ties
     if not word_rankings:
         return None
     ranked = dict(sorted(word_rankings.items(), key=lambda item: (item[1], item[0])))
     top = dict(itertools.islice(ranked.items(), TOP_CHOICES_COUNT))
-    if not quiet:
+    if debug:
         print('Ranked: {}'.format(top))
     return next(iter(top))
 
