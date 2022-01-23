@@ -91,10 +91,18 @@ class State:
 
 def main():
     args = get_parser().parse_args()
-    word_file = ALPHA_FILE_PATH if args.word_length != 5 or args.expanded_word_list else WORDLE_FILE_PATH
+    word_file = ALPHA_FILE_PATH if args.word_length != DEFAULT_WORD_LENGTH or args.expanded_word_list else WORDLE_FILE_PATH
     test_word = args.test_word.upper() if args.test_word else None
     test_set = DEFAULT_TEST_SET if args.test_set == [] else args.test_set
-    words = load_words(word_file)
+    if test_set:
+        test_set = [word.upper() for word in test_set]
+    if test_word and len(test_word) != args.word_length:
+        raise Exception('Test word {} is the wrong length! Expected {} characters.'.format(test_word, args.word_length))
+    if test_set:
+        for word in test_set:
+            if len(word) != args.word_length:
+                raise Exception('Test word {} is the wrong length! Expected {} characters.'.format(word, args.word_length))
+    words = load_words(word_file, args.word_length)
     print('Loaded {} words.'.format(len(words)))
     if args.test_all or test_set:
         test_many(words, args.word_length, args.rounds, test_set)
@@ -130,7 +138,7 @@ When prompted for the result of a guess, you can respond with letters instead of
     return parser
 
 def test_many(words, word_length, max_rounds, test_set):
-    eligible_words = test_set if test_set else sorted(word for word in words if len(word) == word_length)
+    eligible_words = test_set if test_set else words
     scores = [0] * max_rounds
     failed = 0
     for word in eligible_words:
@@ -340,9 +348,11 @@ def choose_word(word_rankings, debug):
         print('Ranked: {}'.format(top))
     return next(iter(top))
 
-def load_words(path):
+def load_words(path, word_length):
     with open(get_word_file_path(path)) as word_file:
-        return list(sorted(word_file.read().upper().split()))
+        words = word_file.read().upper().split()
+        filtered = [word for word in words if len(word) == word_length]
+        return list(sorted(filtered))
 
 def get_word_file_path(path):
     script_dir = os.path.dirname(__file__) 
