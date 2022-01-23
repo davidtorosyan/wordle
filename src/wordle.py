@@ -180,6 +180,8 @@ def test_many(words, word_length, max_rounds, test_set, no_emoji):
     print('\nSTATISTICS\nPlayed: {}, Win %: {:.0%}, Won: {}, Failed: {}, Mean: {:.1f}'.format(played, win_percent, success, failed, mean_score))
     for idx, score in enumerate(scores):
         bar_length = int(score / max_score * STATS_BAR_MAX_LENGTH) if scaled else score
+        if bar_length == 0 and score > 0:
+            bar_length = 1
         bar = (STATS_BAR_CHAR if no_emoji else STATS_BAR_CHAR_EMOJI) * bar_length
         print('{}: {} {}'.format(idx+1, score, bar))
 
