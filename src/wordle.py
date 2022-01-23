@@ -17,6 +17,7 @@ TOP_CHOICES_COUNT = 5
 RANK_PRECISION = 4
 RANK_HEURISTIC_MIN_COUNT = 100
 RANK_HEURISTIC_NO_CHANGE_COUNT = 10
+RANK_HEURISTIC_TRY_TO_WIN_COUNT = 10
 
 STATS_BAR_MAX_LENGTH = 10
 STATS_BAR_CHAR = '🟩'
@@ -163,7 +164,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
     responses = []
     remaining_words = filter_words(words, knowledge)
     while True:
-        guess = get_next_word(remaining_words, knowledge, debug)
+        guess = get_next_word(words, remaining_words, knowledge, debug)
         if not guess:
             if not quiet:
                 print('No eligible guess found, we lost!')
@@ -174,6 +175,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
         if (is_not_word(response)):
             if not quiet:
                 print('Okay, let\'s try again.')
+            words.remove(guess)
             remaining_words.remove(guess)
         else:
             info = parse(guess, response, word_length)
@@ -273,8 +275,8 @@ def parse(guess, response, word_length):
         result.mark_wrong_everywhere(guess_char)
     return result
 
-def get_next_word(words, state, debug):
-    ranked = rank_words(words, state, debug)
+def get_next_word(words, remaining_words, state, debug):
+    ranked = rank_words(words, remaining_words, state, debug)
     return choose_word(ranked, debug)
 
 def filter_words(words, state):
@@ -291,11 +293,13 @@ def satisfied(word, state):
             return False
     return True
 
-def rank_words(words, state, debug):
+def rank_words(words, remaining_words, state, debug):
     total = len(words)
+    total_remaining = len(remaining_words)
+    word_set = remaining_words if total_remaining < RANK_HEURISTIC_TRY_TO_WIN_COUNT else words
     if debug:
-        print('Ranking {} words using knowledge: {}'.format(total, state))
-    return {word: round(rank_word(word, words), RANK_PRECISION) for word in words}
+        print('Ranking {} words (with {} remaining) using knowledge: {}'.format(total, total_remaining, state))
+    return {word: round(rank_word(word, remaining_words), RANK_PRECISION) for word in word_set}
 
 def rank_word(word, words):
     max_partitions = pow(3, len(word))
