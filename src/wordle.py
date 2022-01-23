@@ -20,7 +20,8 @@ RANK_HEURISTIC_NO_CHANGE_COUNT = 10
 RANK_HEURISTIC_TRY_TO_WIN_COUNT = 10
 
 STATS_BAR_MAX_LENGTH = 10
-STATS_BAR_CHAR = '🟩'
+STATS_BAR_CHAR = 'X'
+STATS_BAR_CHAR_EMOJI = '🟩'
 
 RESPONSE_WRONG = 'b' # black
 RESPONSE_CLOSE = 'y' # yellow
@@ -102,12 +103,17 @@ def main():
         for word in test_set:
             if len(word) != args.word_length:
                 raise Exception('Test word {} is the wrong length! Expected {} characters.'.format(word, args.word_length))
-    words = load_words(word_file, args.word_length)
-    print('Loaded {} words.'.format(len(words)))
-    if args.test_all or test_set:
-        test_many(words, args.word_length, args.rounds, test_set)
+    if args.word_set:
+        words = sorted([word.upper() for word in args.word_set if len(word) == args.word_length])
     else:
-        play(words, args.word_length, args.rounds, test_word, False, args.debug)
+        words = load_words(word_file, args.word_length)
+    print('Loaded {} words.'.format(len(words)))
+    if args.matrix:
+        print_matrix(words, args.word_length, args.no_emoji)
+    elif args.test_all or test_set:
+        test_many(words, args.word_length, args.rounds, test_set, args.no_emoji)
+    else:
+        play(words, args.word_length, args.rounds, test_word, False, args.debug, args.no_emoji)
 
 def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, description="""Solver for wordle at https://www.powerlanguage.co.uk/wordle/
@@ -128,6 +134,12 @@ When prompted for the result of a guess, you can respond with letters instead of
                         help='If used, run against a larger dictionary.')
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help='Optional, if used print debug info')
+    parser.add_argument('-m', '--matrix', dest='matrix', action='store_true',
+                        help='Optional, if used analyze the matrix of possibilites')
+    parser.add_argument('-w', '--word-set', nargs='*', default=None,
+                        help='Optional, if used override the dictionary')
+    parser.add_argument('-e', '--no-emoji', dest='no_emoji', action='store_true',
+                        help='Use to disable emojis in the output')
     testing = parser.add_mutually_exclusive_group()
     testing.add_argument('-t', '--test-word', default=None, 
                         help='Optional, use to run a test against a word')
@@ -137,13 +149,23 @@ When prompted for the result of a guess, you can respond with letters instead of
                         help='Optional, if used run against a set of words (the words from January 2022 by default)')
     return parser
 
-def test_many(words, word_length, max_rounds, test_set):
+def print_matrix(words, word_length, no_emoji):
+    grid = []
+    for target in words:
+        responses = [get_test_response(guess, target, True, no_emoji) for guess in words]
+        grid.append(responses)
+    indent = " " * word_length
+    print("{} {}".format(indent, " ".join(words)))
+    for target, row in zip(words, grid):
+        print("{} {}".format(target, " ".join(row)))
+
+def test_many(words, word_length, max_rounds, test_set, no_emoji):
     eligible_words = test_set if test_set else words
     scores = [0] * max_rounds
     failed = 0
     for word in eligible_words:
         test_word = word.upper()
-        score = play(words, word_length, max_rounds, test_word, True, False)
+        score = play(words, word_length, max_rounds, test_word, True, False, True)
         if score is not None:
             scores[score-1] += 1
         else:
@@ -158,10 +180,10 @@ def test_many(words, word_length, max_rounds, test_set):
     print('\nSTATISTICS\nPlayed: {}, Win %: {:.0%}, Won: {}, Failed: {}, Mean: {:.1f}'.format(played, win_percent, success, failed, mean_score))
     for idx, score in enumerate(scores):
         bar_length = int(score / max_score * STATS_BAR_MAX_LENGTH) if scaled else score
-        bar = STATS_BAR_CHAR * bar_length
+        bar = (STATS_BAR_CHAR if no_emoji else STATS_BAR_CHAR_EMOJI) * bar_length
         print('{}: {} {}'.format(idx+1, score, bar))
 
-def play(words, word_length, max_rounds, test_word, quiet, debug):
+def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji):
     if quiet and not test_word:
         raise Exception('Cannot run quiet without a test word!')
     if test_word:
@@ -179,7 +201,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
             return None
         if not quiet:
             print('Round {}, guess: {}'.format(round, guess))
-        response = get_test_response(guess, test_word, quiet) if test_word else input('Was it right? ')
+        response = get_test_response(guess, test_word, quiet, no_emoji) if test_word else input('Was it right? ')
         if (is_not_word(response)):
             if not quiet:
                 print('Okay, let\'s try again.')
@@ -222,13 +244,13 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
                     remaining_words = filter_words(remaining_words, knowledge)
                     round += 1
 
-def get_test_response(guess, test_word, quiet):
+def get_test_response(guess, test_word, quiet, no_emoji):
     guess_list = list(guess)
     test_list = list(test_word)
     result = [''] * len(guess)
     for idx, char in enumerate(guess_list):
         if char == test_list[idx]:
-            result[idx] = RESPONSE_RIGHT_EMOJI
+            result[idx] = RESPONSE_RIGHT if no_emoji else RESPONSE_RIGHT_EMOJI
             guess_list[idx] = ''
             test_list[idx] = ''
     for idx, char in enumerate(guess_list):
@@ -236,13 +258,13 @@ def get_test_response(guess, test_word, quiet):
             continue
         test_idx = test_list.index(char) if char in test_list else None
         if test_idx is not None:
-            result[idx] = RESPONSE_CLOSE_EMOJI
+            result[idx] = RESPONSE_CLOSE if no_emoji else RESPONSE_CLOSE_EMOJI
             guess_list[idx] = ''
             test_list[test_idx] = ''
     for idx, char in enumerate(guess_list):
         if not char:
             continue
-        result[idx] = RESPONSE_WRONG_EMOJI
+        result[idx] = RESPONSE_WRONG if no_emoji else RESPONSE_WRONG_EMOJI
     response = ''.join(result)
     if not quiet:
         print('Was it right? {}'.format(response))
@@ -316,7 +338,7 @@ def rank_word(word, words):
     test_set = shuffle(words, word) if use_heuristic else words
     no_change_count = 0
     for target in test_set:
-        response = get_test_response(word, target, True)
+        response = get_test_response(word, target, True, True)
         no_change_count = no_change_count + 1 if response in partitions else 0
         partitions.add(response)
         if use_heuristic and no_change_count >= RANK_HEURISTIC_NO_CHANGE_COUNT:
