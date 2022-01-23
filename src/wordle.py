@@ -3,6 +3,7 @@
 import argparse
 import itertools
 import os
+import random
 import string
 
 from collections import defaultdict
@@ -14,6 +15,8 @@ DEFAULT_ROUNDS = 6
 DEFAULT_TEST_SET = ['REBUS', 'BOOST', 'TRUSS', 'SIEGE', 'TIGER', 'BANAL', 'SLUMP', 'CRANK', 'GORGE', 'QUERY', 'DRINK', 'FAVOR', 'ABBEY', 'TANGY', 'PANIC', 'SOLAR', 'SHIRE', 'PROXY', 'POINT']
 TOP_CHOICES_COUNT = 5
 RANK_PRECISION = 4
+RANK_HEURISTIC_MIN_COUNT = 100
+RANK_HEURISTIC_NO_CHANGE_COUNT = 10
 
 STATS_BAR_MAX_LENGTH = 10
 STATS_BAR_CHAR = '🟩'
@@ -30,7 +33,6 @@ class State:
     def __init__(self, word_length):
         self.required = {}
         self.spots = []
-        self.blocklist = set()
         self.word_length = word_length
         for idx in range(0, self.word_length):
             self.spots.append(set(string.ascii_uppercase))
@@ -40,7 +42,6 @@ class State:
             self.required[letter] = max(self.required.get(letter, 0), num)
         for idx, spot in enumerate(self.spots):
             spot.intersection_update(other.spots[idx])
-        self.blocklist.update(other.blocklist)
 
     def mark_wrong(self, letter, index):
         self.spots[index].discard(letter)
@@ -59,9 +60,6 @@ class State:
             # don't mess with the spot if it's already solved
             if len(spot) > 1:
                 spot.discard(letter)
-
-    def not_word(self, word):
-        self.blocklist.add(word)
 
     def is_consistent(self):
         for spot in self.spots:
@@ -86,21 +84,6 @@ class State:
         return 'Required: {}, Options: {}'.format(
             self.required.__str__(),
             options.__str__())
-
-    def __repr__(self):
-        return self.__str__()
-
-class WordStatistics:
-    def __init__(self, total, by_letter, by_index):
-        self.total = total
-        self.by_letter = by_letter
-        self.by_index = by_index
-
-    def __str__(self):
-        return 'Total: {}, by_letter: {}, by_index: {}'.format(
-            self.total.__str__(),
-            self.by_letter.__str__(),
-            self.by_index.__str__())
 
     def __repr__(self):
         return self.__str__()
@@ -178,8 +161,9 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
     knowledge = State(word_length)
     round = 1
     responses = []
+    remaining_words = filter_words(words, knowledge)
     while True:
-        guess = get_next_word(words, knowledge, debug)
+        guess = get_next_word(remaining_words, knowledge, debug)
         if not guess:
             if not quiet:
                 print('No eligible guess found, we lost!')
@@ -190,7 +174,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
         if (is_not_word(response)):
             if not quiet:
                 print('Okay, let\'s try again.')
-            knowledge.not_word(guess)
+            remaining_words.remove(guess)
         else:
             info = parse(guess, response, word_length)
             if not info:
@@ -225,6 +209,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug):
                 else:
                     responses.append(response)
                     knowledge = updated
+                    remaining_words = filter_words(remaining_words, knowledge)
                     round += 1
 
 def get_test_response(guess, test_word, quiet):
@@ -262,9 +247,6 @@ def merge(current_info, new_info):
 def is_win(response, word_length):
     return response == RESPONSE_RIGHT * word_length or response == RESPONSE_RIGHT_EMOJI * word_length
 
-def is_loss(response):
-    return response == 'lost'
-
 def is_not_word(response):
     return response == 'what'
 
@@ -292,17 +274,14 @@ def parse(guess, response, word_length):
     return result
 
 def get_next_word(words, state, debug):
-    filtered = filter_words(words, state)
-    ranked = rank_words(filtered, state, debug)
+    ranked = rank_words(words, state, debug)
     return choose_word(ranked, debug)
 
 def filter_words(words, state):
-    return set([word for word in words if satisfied(word, state)])
+    return [word for word in words if satisfied(word, state)]
 
 def satisfied(word, state):
     if len(word) != state.word_length:
-        return False
-    if word in state.blocklist:
         return False
     for idx, char in enumerate(word):
         if char not in state.spots[idx]:
@@ -316,39 +295,36 @@ def rank_words(words, state, debug):
     total = len(words)
     if debug:
         print('Ranking {} words using knowledge: {}'.format(total, state))
-    composite = build_composite(words, state)
-    return {word: round(rank_word(word, composite), RANK_PRECISION) for word in words}
+    return {word: round(rank_word(word, words), RANK_PRECISION) for word in words}
 
-def build_composite(words, state):
-    total = len(words)
-    by_letter = defaultdict(int)
-    for word in words:
-        for letter in set(word):
-            by_letter[letter] += 1
-    by_index = []
-    for idx in range(0, state.word_length):
-        spot = {}
-        for word in words:
-            letter = word[idx]
-            spot[letter] = spot.get(letter, 0) + 1
-        by_index.append(spot)
-    return WordStatistics(total, by_letter, by_index)
+def rank_word(word, words):
+    max_partitions = pow(3, len(word))
+    partitions = set()
+    use_heuristic = len(words) > RANK_HEURISTIC_MIN_COUNT
+    test_set = shuffle(words, word) if use_heuristic else words
+    no_change_count = 0
+    for target in test_set:
+        response = get_test_response(word, target, True)
+        no_change_count = no_change_count + 1 if response in partitions else 0
+        partitions.add(response)
+        if use_heuristic and no_change_count >= RANK_HEURISTIC_NO_CHANGE_COUNT:
+            break
+    rank = 1 - len(partitions) / max_partitions
+    return rank
 
-def rank_word(word, composite):
-    return sum((rank_letter(letter, idx, composite) for idx, letter in enumerate(word))) / len(word)
-
-def rank_letter(letter, idx, composite):
-    remaining_if_right = composite.by_index[idx][letter]
-    remaining_if_close = composite.by_letter[letter] - composite.by_index[idx][letter]
-    remaining_if_wrong = composite.total - composite.by_letter[letter]
-
-    ideal = composite.total / 3
-    distance_right = abs(ideal - remaining_if_right)
-    distance_close = abs(ideal - remaining_if_close)
-    distance_wrong = abs(ideal - remaining_if_wrong)
-
-    distance = (distance_right + distance_close + distance_wrong) / 3
-    return distance / composite.total
+def shuffle(words, seed):
+    random.seed(seed)
+    size = len(words)
+    override_spots = {}
+    while size > 0:
+        index = random.randint(0, size-1)
+        if index in override_spots:
+            choice = override_spots[index]
+        else:
+            choice = words[index]
+        override_spots[index] = words[size-1]
+        size -= 1
+        yield choice
 
 def choose_word(word_rankings, debug):
     # sort by score, and then by word to break ties
@@ -362,7 +338,7 @@ def choose_word(word_rankings, debug):
 
 def load_words(path):
     with open(get_word_file_path(path)) as word_file:
-        return set(word_file.read().upper().split())
+        return list(sorted(word_file.read().upper().split()))
 
 def get_word_file_path(path):
     script_dir = os.path.dirname(__file__) 
