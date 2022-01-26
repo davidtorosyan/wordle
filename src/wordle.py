@@ -90,6 +90,12 @@ class State:
     def __repr__(self):
         return self.__str__()
 
+def valid_or_throw(word, words, word_length, type):
+    if len(word) != word_length:
+        raise Exception('{} "{}" is the wrong length! Expected {} characters.'.format(word, word_length))
+    if word not in words:
+        raise Exception('{} "{}" is not a word!'.format(type, word))
+
 def main():
     args = get_parser().parse_args()
     word_file = ALPHA_FILE_PATH if args.word_length != DEFAULT_WORD_LENGTH or args.expanded_word_list else WORDLE_FILE_PATH
@@ -97,23 +103,27 @@ def main():
     test_set = DEFAULT_TEST_SET if args.test_set == [] else args.test_set
     if test_set:
         test_set = [word.upper() for word in test_set]
-    if test_word and len(test_word) != args.word_length:
-        raise Exception('Test word {} is the wrong length! Expected {} characters.'.format(test_word, args.word_length))
-    if test_set:
-        for word in test_set:
-            if len(word) != args.word_length:
-                raise Exception('Test word {} is the wrong length! Expected {} characters.'.format(word, args.word_length))
     if args.word_set:
         words = sorted([word.upper() for word in args.word_set if len(word) == args.word_length])
     else:
         words = load_words(word_file, args.word_length)
     print('Loaded {} words.'.format(len(words)))
+    if test_word:
+        valid_or_throw(test_word, words, args.word_length, 'Test word')
+    if test_set:
+        for word in test_set:
+            valid_or_throw(word, words, args.word_length, 'Test word')
+    guesses = args.guesses
+    if guesses:
+        guesses = [word.upper() for word in guesses]
+        for word in guesses:
+            valid_or_throw(word, words, args.word_length, 'Guess')
     if args.matrix:
         print_matrix(words, args.word_length, args.no_emoji)
     elif args.test_all or test_set:
-        test_many(words, args.word_length, args.rounds, test_set, args.no_emoji)
+        test_many(words, args.word_length, args.rounds, test_set, args.no_emoji, guesses)
     else:
-        play(words, args.word_length, args.rounds, test_word, False, args.debug, args.no_emoji)
+        play(words, args.word_length, args.rounds, test_word, False, args.debug, args.no_emoji, guesses)
 
 def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, description="""Solver for wordle at https://www.powerlanguage.co.uk/wordle/
@@ -140,6 +150,8 @@ When prompted for the result of a guess, you can respond with letters instead of
                         help='Optional, if used override the dictionary')
     parser.add_argument('-e', '--no-emoji', dest='no_emoji', action='store_true',
                         help='Use to disable emojis in the output')
+    parser.add_argument('-g', '--guesses', nargs='*', default=None,
+                        help='Optional, pre-popluate a set of starting guesses')
     testing = parser.add_mutually_exclusive_group()
     testing.add_argument('-t', '--test-word', default=None, 
                         help='Optional, use to run a test against a word')
@@ -159,13 +171,13 @@ def print_matrix(words, word_length, no_emoji):
     for target, row in zip(words, grid):
         print("{} {}".format(target, " ".join(row)))
 
-def test_many(words, word_length, max_rounds, test_set, no_emoji):
+def test_many(words, word_length, max_rounds, test_set, no_emoji, guesses):
     eligible_words = test_set if test_set else words
     scores = [0] * max_rounds
     failed = 0
     for word in eligible_words:
         test_word = word.upper()
-        score = play(words, word_length, max_rounds, test_word, True, False, True)
+        score = play(words, word_length, max_rounds, test_word, True, False, True, guesses)
         if score is not None:
             scores[score-1] += 1
         else:
@@ -185,7 +197,7 @@ def test_many(words, word_length, max_rounds, test_set, no_emoji):
         bar = (STATS_BAR_CHAR if no_emoji else STATS_BAR_CHAR_EMOJI) * bar_length
         print('{}: {} {}'.format(idx+1, score, bar))
 
-def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji):
+def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji, guesses):
     if quiet and not test_word:
         raise Exception('Cannot run quiet without a test word!')
     if test_word:
@@ -195,8 +207,9 @@ def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji):
     round = 1
     responses = []
     remaining_words = filter_words(words, knowledge)
+    remaining_guesses = guesses
     while True:
-        guess = get_next_word(words, remaining_words, knowledge, debug)
+        guess = remaining_guesses.pop(0) if remaining_guesses else get_next_word(words, remaining_words, knowledge, debug)
         if not guess:
             if not quiet:
                 print('No eligible guess found, we lost!')
