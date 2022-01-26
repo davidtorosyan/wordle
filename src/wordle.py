@@ -2,6 +2,7 @@
 
 import argparse
 import itertools
+import json
 import os
 import random
 import string
@@ -118,7 +119,9 @@ def main():
         guesses = [word.upper() for word in guesses]
         for word in guesses:
             valid_or_throw(word, words, args.word_length, 'Guess')
-    if args.matrix:
+    if args.optimal:
+        compute_optimal(words, args.rounds)
+    elif args.matrix:
         print_matrix(words, args.word_length, args.no_emoji)
     elif args.test_all or test_set:
         test_many(words, args.word_length, args.rounds, test_set, args.no_emoji, guesses)
@@ -144,15 +147,18 @@ When prompted for the result of a guess, you can respond with letters instead of
                         help='If used, run against a larger dictionary.')
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help='Optional, if used print debug info')
-    parser.add_argument('-m', '--matrix', dest='matrix', action='store_true',
-                        help='Optional, if used analyze the matrix of possibilites')
     parser.add_argument('-w', '--word-set', nargs='*', default=None,
                         help='Optional, if used override the dictionary')
     parser.add_argument('-e', '--no-emoji', dest='no_emoji', action='store_true',
                         help='Use to disable emojis in the output')
     parser.add_argument('-g', '--guesses', nargs='*', default=None,
                         help='Optional, pre-popluate a set of starting guesses')
-    testing = parser.add_mutually_exclusive_group()
+    mode = parser.add_mutually_exclusive_group()            
+    mode.add_argument('-m', '--matrix', dest='matrix', action='store_true',
+                        help='Optional, if used analyze the matrix of possibilites')
+    mode.add_argument('-o', '--optimal', dest='optimal', action='store_true',
+                        help='Optional, if used try to compute an optimal tree of options')
+    testing = mode.add_mutually_exclusive_group()
     testing.add_argument('-t', '--test-word', default=None, 
                         help='Optional, use to run a test against a word')
     testing.add_argument('-a', '--test-all', dest='test_all', action='store_true',
@@ -160,6 +166,32 @@ When prompted for the result of a guess, you can respond with letters instead of
     testing.add_argument('-s', '--test-set', nargs='*', default=None,
                         help='Optional, if used run against a set of words (the words from January 2022 by default)')
     return parser
+
+def dive(trie, words, max_rounds, responses, path = []):
+    for guess in words:
+        if guess in path:
+            continue
+        response = responses[guess]
+        guess_trie = trie.get(guess, {})
+        if is_win(response):
+            guess_trie[response] = len(path) + 1
+        elif len(path) + 1 == max_rounds:
+            pass
+        else:
+            response_trie = guess_trie.get(response, {})
+            dive(response_trie, words, max_rounds, responses, path + [guess])
+            if response_trie and response not in guess_trie:
+                guess_trie[response] = response_trie
+        if guess_trie and guess not in trie:
+            trie[guess] = guess_trie
+
+def compute_optimal(words, max_rounds):
+    response_lookup = {target: {guess: get_test_response(guess, target, True, True) for guess in words} for target in words}
+    trie = {}
+    for target in words:
+        responses = response_lookup[target]
+        dive(trie, words, max_rounds, responses)
+    print(json.dumps(trie, sort_keys=True, indent=4))
 
 def print_matrix(words, word_length, no_emoji):
     grid = []
@@ -235,7 +267,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji, gues
                 if not updated.is_consistent():
                     if not quiet:
                         print('Response is not consistent with current state, try again!')
-                elif is_win(response, word_length):
+                elif is_win(response):
                     responses.append(response)
                     if not quiet:
                         print('Hooray!')
@@ -291,8 +323,8 @@ def merge(current_info, new_info):
     state.fill(new_info)
     return state
 
-def is_win(response, word_length):
-    return response == RESPONSE_RIGHT * word_length or response == RESPONSE_RIGHT_EMOJI * word_length
+def is_win(response):
+    return all(char == RESPONSE_RIGHT or char == RESPONSE_RIGHT_EMOJI for char in response)
 
 def is_not_word(response):
     return response == 'what'
