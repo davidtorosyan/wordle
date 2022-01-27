@@ -139,9 +139,9 @@ When prompted for the result of a guess, you can respond with letters instead of
         RESPONSE_RIGHT_EMOJI, RESPONSE_RIGHT,
         RESPONSE_CLOSE_EMOJI, RESPONSE_CLOSE,
         RESPONSE_WRONG_EMOJI, RESPONSE_WRONG))
-    parser.add_argument('-l', '--word-length', type=int, default=DEFAULT_WORD_LENGTH, 
+    parser.add_argument('-l', '--word-length', type=int, default=DEFAULT_WORD_LENGTH,
                         help='The word length ({} by default), non-default implies --expanded-word-list'.format(DEFAULT_WORD_LENGTH))
-    parser.add_argument('-r', '--rounds', type=int, default=DEFAULT_ROUNDS, 
+    parser.add_argument('-r', '--rounds', type=int, default=DEFAULT_ROUNDS,
                         help='The number of rounds ({} by default)'.format(DEFAULT_ROUNDS))
     parser.add_argument('--expanded-word-list', dest='expanded_word_list', action='store_true',
                         help='If used, run against a larger dictionary.')
@@ -153,13 +153,13 @@ When prompted for the result of a guess, you can respond with letters instead of
                         help='Use to disable emojis in the output')
     parser.add_argument('-g', '--guesses', nargs='*', default=None,
                         help='Optional, pre-popluate a set of starting guesses')
-    mode = parser.add_mutually_exclusive_group()            
+    mode = parser.add_mutually_exclusive_group()
     mode.add_argument('-m', '--matrix', dest='matrix', action='store_true',
                         help='Optional, if used analyze the matrix of possibilites')
     mode.add_argument('-o', '--optimal', dest='optimal', action='store_true',
                         help='Optional, if used try to compute an optimal tree of options')
     testing = mode.add_mutually_exclusive_group()
-    testing.add_argument('-t', '--test-word', default=None, 
+    testing.add_argument('-t', '--test-word', default=None,
                         help='Optional, use to run a test against a word')
     testing.add_argument('-a', '--test-all', dest='test_all', action='store_true',
                         help='Optional, if used run a test against all words')
@@ -241,7 +241,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji, gues
     remaining_words = filter_words(words, knowledge)
     remaining_guesses = guesses
     while True:
-        guess = remaining_guesses.pop(0) if remaining_guesses else get_next_word(words, remaining_words, knowledge, debug)
+        guess = get_next_word(words, remaining_words, knowledge, debug, remaining_guesses)
         if not guess:
             if not quiet:
                 print('No eligible guess found, we lost!')
@@ -352,7 +352,13 @@ def parse(guess, response, word_length):
         result.mark_wrong_everywhere(guess_char)
     return result
 
-def get_next_word(words, remaining_words, state, debug):
+def get_next_word(words, remaining_words, state, debug, remaining_guesses):
+    if remaining_guesses:
+        guess = remaining_guesses.pop(0)
+        total_remaining = len(remaining_words)
+        if debug:
+            print('Preloading "{}" (with {} remaining), current knowledge: {}'.format(guess, total_remaining, state))
+        return guess
     ranked = rank_words(words, remaining_words, state, debug)
     return choose_word(ranked, debug)
 
@@ -424,7 +430,7 @@ def load_words(path, word_length):
         return list(sorted(filtered))
 
 def get_word_file_path(path):
-    script_dir = os.path.dirname(__file__) 
+    script_dir = os.path.dirname(__file__)
     return os.path.join(script_dir, path)
 
 if __name__ == '__main__':
