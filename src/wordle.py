@@ -248,7 +248,7 @@ def play(words, word_length, max_rounds, test_word, quiet, debug, no_emoji, gues
     round = 1
     responses = []
     remaining_words = filter_words(possible_answers if possible_answers else words, knowledge)
-    remaining_guesses = guesses
+    remaining_guesses = guesses.copy() if guesses else None
     while True:
         guess = get_next_word(words, remaining_words, knowledge, debug, remaining_guesses)
         if not guess:
